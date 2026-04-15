@@ -11,6 +11,7 @@ function App() {
   const [message, setMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const [showChat, setShowChat] = useState(false);
+  const [typingUser, setTypingUser] = useState(""); // NEW: State for typing indicator
 
   const joinRoom = () => {
     if (username !== "" && room !== "") {
@@ -35,12 +36,24 @@ function App() {
   };
 
   useEffect(() => {
-    const handler = (data) => {
+    const receiveHandler = (data) => {
       setMessageList((list) => [...list, data]);
     };
-    socket.on("receive_message", handler);
-    return () => socket.off("receive_message", handler);
-  }, [socket]);
+
+    // NEW: Listen for typing and clear it after 3 seconds
+    const typingHandler = (authorName) => {
+      setTypingUser(authorName);
+      setTimeout(() => setTypingUser(""), 3000); 
+    };
+
+    socket.on("receive_message", receiveHandler);
+    socket.on("user_typing", typingHandler);
+
+    return () => {
+      socket.off("receive_message", receiveHandler);
+      socket.off("user_typing", typingHandler);
+    };
+  }, []);
 
   return (
     <div className="App" style={{ padding: '20px', maxWidth: '400px', margin: '0 auto', fontFamily: 'Arial' }}>
@@ -67,9 +80,27 @@ function App() {
                 </div>
               </div>
             ))}
+            
+            {/* NEW: Display the typing indicator if someone is typing */}
+            {typingUser && (
+              <div style={{ margin: '10px 0', textAlign: 'left', fontStyle: 'italic', color: 'gray', fontSize: '12px' }}>
+                {typingUser} is typing...
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex' }}>
-            <input type="text" value={message} placeholder="Message..." onChange={(e) => setMessage(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && sendMessage()} style={{ flex: '1', padding: '10px' }} />
+            {/* NEW: Emit the typing event whenever a key is pressed */}
+            <input 
+              type="text" 
+              value={message} 
+              placeholder="Message..." 
+              onChange={(e) => setMessage(e.target.value)} 
+              onKeyDown={(e) => {
+                socket.emit("typing", { room: room, author: username });
+                if (e.key === 'Enter') sendMessage();
+              }} 
+              style={{ flex: '1', padding: '10px' }} 
+            />
             <button onClick={sendMessage} style={{ padding: '10px' }}>Send</button>
           </div>
         </div>

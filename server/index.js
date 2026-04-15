@@ -35,6 +35,12 @@ io.on('connection', (socket) => {
     socket.to(data.room).emit("receive_message", data);
   });
 
+  // NEW: Listen for a user typing
+  socket.on("typing", (data) => {
+    // Broadcast to everyone else in the room that this user is typing
+    socket.to(data.room).emit("user_typing", data.author);
+  });
+
   // Listen for users leaving
   socket.on('disconnect', () => {
     console.log(`🔴 User Disconnected: ${socket.id}`);
