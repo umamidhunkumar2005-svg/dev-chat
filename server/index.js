@@ -2,14 +2,14 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
-const mongoose = require('mongoose'); // NEW: Require mongoose
+const mongoose = require('mongoose');
+require('dotenv').config(); // NEW: Load secret variables from .env file
 
 const app = express();
 app.use(cors());
 
-// NEW: Connect to MongoDB
-// REPLACE <db_username> and <db_password> with your actual details!
-const db_link = "mongodb+srv://midhun_admin:DevChat2026@cluster0.lmeyczb.mongodb.net/devchat?retryWrites=true&w=majority";
+// NEW: Use the hidden URL from your .env file
+const db_link = process.env.MONGO_URL; 
 
 mongoose.connect(db_link)
   .then(() => console.log("💾 MongoDB Connected Successfully!"))
@@ -44,7 +44,7 @@ io.on('connection', (socket) => {
     socket.join(roomID); 
     console.log(`👤 User ${socket.id} joined room: ${roomID}`);
 
-    // NEW: When someone joins, fetch all previous messages for this room from the database
+    // Fetch all previous messages for this room from the database
     try {
       const previousMessages = await Message.find({ room: roomID });
       // Send the history only to the user who just joined
@@ -58,7 +58,7 @@ io.on('connection', (socket) => {
   socket.on("send_message", async (data) => {
     console.log("Message received for room:", data.room);
     
-    // NEW: Save the message to the database before sending it to others
+    // Save the message to the database before sending it to others
     try {
       const newMessage = new Message(data);
       await newMessage.save();
