@@ -41,9 +41,8 @@ const roomUsers = {}; // Store active users in each room
 io.on('connection', (socket) => {
   console.log(`🟢 User Connected: ${socket.id}`);
 
-  // Listen for a user wanting to join a specific room (handles both string ID or object data if passed)
+  // Listen for a user wanting to join a specific room
   socket.on("join_room", async (data) => {
-    // Supports data being either just a string roomID or an object { room, username }
     const roomID = typeof data === "object" ? data.room : data;
     const username = typeof data === "object" ? data.username : "Anonymous";
 
@@ -72,20 +71,18 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Listen for a message being sent
-  socket.on("send_message", async (data) => {
+  // Listen for a message being sent (Optimized for instant delivery)
+  socket.on("send_message", (data) => {
     console.log("Message received for room:", data.room);
     
-    // Save the message to the database before sending it to others
-    try {
-      const newMessage = new Message(data);
-      await newMessage.save();
-    } catch (error) {
-      console.log("Error saving message:", error);
-    }
-
-    // Send to everyone in that specific room (including sender if needed, or socket.to for others)
+    // 1. Send to the other user instantly over WebSockets (Zero delay)
     socket.to(data.room).emit("receive_message", data);
+
+    // 2. Save to MongoDB in the background without blocking the socket emission
+    const newMessage = new Message(data);
+    newMessage.save().catch((error) => {
+      console.log("Error saving message:", error);
+    });
   });
 
   // Listen for a user typing
