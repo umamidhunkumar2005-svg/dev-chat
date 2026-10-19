@@ -2,20 +2,20 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
+require('dotenv').config(); // Load secret variables from .env file
 const mongoose = require('mongoose');
-require('dotenv').config(); // NEW: Load secret variables from .env file
 
 const app = express();
 app.use(cors());
 
-// NEW: Use the hidden URL from your .env file
+// Use the hidden URL from your .env file
 const db_link = process.env.MONGO_URL; 
 
 mongoose.connect(db_link)
   .then(() => console.log("💾 MongoDB Connected Successfully!"))
   .catch((err) => console.log("❌ MongoDB Connection Failed:", err));
 
-// NEW: Create a blueprint (Schema) for our messages
+// Create a blueprint (Schema) for our messages
 const messageSchema = new mongoose.Schema({
   room: String,
   author: String,
@@ -35,19 +35,37 @@ const io = new Server(server, {
   }
 });
 
+const roomUsers = {}; // Store active users in each room
+
 // 3. Listen for events
 io.on('connection', (socket) => {
   console.log(`🟢 User Connected: ${socket.id}`);
 
-  // Listen for a user wanting to join a specific room
-  socket.on("join_room", async (roomID) => {
+  // Listen for a user wanting to join a specific room (handles both string ID or object data if passed)
+  socket.on("join_room", async (data) => {
+    // Supports data being either just a string roomID or an object { room, username }
+    const roomID = typeof data === "object" ? data.room : data;
+    const username = typeof data === "object" ? data.username : "Anonymous";
+
     socket.join(roomID); 
-    console.log(`👤 User ${socket.id} joined room: ${roomID}`);
+    socket.data = { room: roomID, username };
+    console.log(`👤 User ${socket.id} (${username}) joined room: ${roomID}`);
+
+    // Track online users per room
+    if (!roomUsers[roomID]) {
+      roomUsers[roomID] = [];
+    }
+    if (!roomUsers[roomID].some((u) => u.id === socket.id)) {
+      roomUsers[roomID].push({ id: socket.id, username });
+    }
+
+    // Broadcast updated active user list to everyone in the room
+    io.to(roomID).emit("user_list", roomUsers[roomID]);
 
     // Fetch all previous messages for this room from the database
     try {
       const previousMessages = await Message.find({ room: roomID });
-      // Send the history only to the user who just joined
+      // Send history only to the user who just joined
       socket.emit("chat_history", previousMessages); 
     } catch (error) {
       console.log("Error fetching history:", error);
@@ -66,7 +84,7 @@ io.on('connection', (socket) => {
       console.log("Error saving message:", error);
     }
 
-    // Send ONLY to people in that specific room
+    // Send to everyone in that specific room (including sender if needed, or socket.to for others)
     socket.to(data.room).emit("receive_message", data);
   });
 
@@ -75,8 +93,13 @@ io.on('connection', (socket) => {
     socket.to(data.room).emit("user_typing", data.author);
   });
 
-  // Listen for users leaving
+  // Listen for users leaving / disconnecting
   socket.on('disconnect', () => {
+    const { room, username } = socket.data || {};
+    if (room && roomUsers[room]) {
+      roomUsers[room] = roomUsers[room].filter((u) => u.id !== socket.id);
+      io.to(room).emit("user_list", roomUsers[room]);
+    }
     console.log(`🔴 User Disconnected: ${socket.id}`);
   });
 });
