@@ -3,7 +3,13 @@ import io from 'socket.io-client';
 import { playMessageSound } from './notificationSound';
 import './App.css';
 
-const socket = io.connect("https://dev-chat-server-0dgn.onrender.com");
+// Optimized socket connection forcing websocket transport for instant delivery
+const socket = io.connect("https://dev-chat-server-0dgn.onrender.com", {
+  transports: ['websocket', 'polling'],
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+});
 
 function App() {
   const [username, setUsername] = useState(localStorage.getItem("devchat_user") || "");
