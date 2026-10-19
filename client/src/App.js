@@ -3,7 +3,6 @@ import io from 'socket.io-client';
 import { playMessageSound } from './notificationSound';
 import './App.css';
 
-// Optimized socket connection forcing websocket transport for instant delivery
 const socket = io.connect("https://dev-chat-server-0dgn.onrender.com", {
   transports: ['websocket', 'polling'],
   reconnection: true,
@@ -21,11 +20,10 @@ function App() {
   const [typingUser, setTypingUser] = useState("");
   const [activeUsers, setActiveUsers] = useState([]);
 
-  // Theme state: "light", "dark", or "system"
   const [theme, setTheme] = useState(localStorage.getItem("devchat_theme") || "system");
   const [resolvedTheme, setResolvedTheme] = useState("light");
 
-  // Handle Theme Resolution (System vs Explicit)
+  // Handle Theme Resolution
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -56,6 +54,7 @@ function App() {
     }
   };
 
+  // Automatically rejoin room and fetch history on refresh if session exists
   useEffect(() => {
     if (showChat && room && username) {
       socket.emit("join_room", { room, username });
@@ -79,6 +78,7 @@ function App() {
 
   const leaveRoom = () => {
     setShowChat(false);
+    // Only clear chat session data, keeping theme preferences intact
     localStorage.removeItem("devchat_user");
     localStorage.removeItem("devchat_room");
     localStorage.removeItem("devchat_show");
@@ -87,7 +87,10 @@ function App() {
 
   useEffect(() => {
     const receiveHandler = (data) => {
-      setMessageList((list) => [...list, data]);
+      setMessageList((list) => {
+        // Prevent duplicate appending if the message is already in the list
+        return [...list, data];
+      });
       playMessageSound();
     };
 
@@ -96,7 +99,11 @@ function App() {
       setTimeout(() => setTypingUser(""), 3000); 
     };
     
-    const historyHandler = (history) => setMessageList(history);
+    // Load database history cleanly when joining or refreshing
+    const historyHandler = (history) => {
+      setMessageList(history);
+    };
+
     const userListHandler = (users) => setActiveUsers(users);
 
     socket.on("receive_message", receiveHandler);
@@ -112,7 +119,7 @@ function App() {
     };
   }, []);
 
-  // Theme-based style dictionary
+  // Theme styles dictionary
   const styles = {
     app: {
       padding: '20px',
@@ -178,8 +185,6 @@ function App() {
     <div style={styles.app}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h1 style={{ margin: 0 }}>DevChat 🚀</h1>
-        
-        {/* Theme Selector Dropdown */}
         <div>
           <select 
             value={theme} 
@@ -202,16 +207,12 @@ function App() {
         </div>
       ) : (
         <div style={styles.card}>
-          {/* Header */}
           <div style={styles.header}>
             <p style={{ margin: 0, fontWeight: 500 }}>Live Chat: Room {room}</p>
             <button onClick={leaveRoom} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Leave</button>
           </div>
 
-          {/* Body Container */}
           <div style={{ display: 'flex', background: resolvedTheme === 'dark' ? '#1e293b' : '#fff' }}>
-            
-            {/* Online Users Sidebar */}
             <div style={styles.sidebar}>
               <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', opacity: 0.8 }}>🟢 Online ({activeUsers.length})</h4>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '13px' }}>
@@ -223,7 +224,6 @@ function App() {
               </ul>
             </div>
 
-            {/* Message Feed Area */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               <div style={styles.chatBox}>
                 {messageList.map((msg, index) => (
@@ -250,7 +250,6 @@ function App() {
                 )}
               </div>
 
-              {/* Input Area */}
               <div style={styles.inputArea}>
                 <input 
                   type="text" 
