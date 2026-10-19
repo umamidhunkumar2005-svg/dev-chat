@@ -21,7 +21,6 @@ function App() {
 
   // Handle Theme Resolution (System vs Explicit)
   useEffect(() => {
-    const rootElement = document.documentElement;
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
     const updateTheme = () => {
