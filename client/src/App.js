@@ -44,53 +44,10 @@ function App() {
     }
   }, [theme]);
 
-  const joinRoom = () => {
-    if (username !== "" && room !== "") {
-      socket.emit("join_room", { room, username }); 
-      setShowChat(true);
-      localStorage.setItem("devchat_user", username);
-      localStorage.setItem("devchat_room", room);
-      localStorage.setItem("devchat_show", "true");
-    }
-  };
-
-  // Automatically rejoin room and fetch history on refresh if session exists
-  useEffect(() => {
-    if (showChat && room && username) {
-      socket.emit("join_room", { room, username });
-    }
-  }, [showChat, room, username]);
-
-  const sendMessage = () => {
-    if (message !== "") {
-      const messageData = {
-        room: room, 
-        author: username,
-        text: message,
-        time: new Date(Date.now()).getHours() + ":" + String(new Date(Date.now()).getMinutes()).padStart(2, '0'),
-      };
-
-      socket.emit("send_message", messageData);
-      setMessageList((list) => [...list, messageData]);
-      setMessage("");
-    }
-  };
-
-  const leaveRoom = () => {
-    setShowChat(false);
-    // Only clear chat session data, keeping theme preferences intact
-    localStorage.removeItem("devchat_user");
-    localStorage.removeItem("devchat_room");
-    localStorage.removeItem("devchat_show");
-    window.location.reload();
-  };
-
+  // 1. Setup socket listeners FIRST so they are ready to catch incoming history
   useEffect(() => {
     const receiveHandler = (data) => {
-      setMessageList((list) => {
-        // Prevent duplicate appending if the message is already in the list
-        return [...list, data];
-      });
+      setMessageList((list) => [...list, data]);
       playMessageSound();
     };
 
@@ -99,7 +56,6 @@ function App() {
       setTimeout(() => setTypingUser(""), 3000); 
     };
     
-    // Load database history cleanly when joining or refreshing
     const historyHandler = (history) => {
       setMessageList(history);
     };
@@ -118,6 +74,46 @@ function App() {
       socket.off("user_list", userListHandler);
     };
   }, []);
+
+  // 2. Automatically rejoin room and request history on refresh if session exists
+  useEffect(() => {
+    if (showChat && room && username) {
+      socket.emit("join_room", { room, username });
+    }
+  }, [showChat, room, username]);
+
+  const joinRoom = () => {
+    if (username !== "" && room !== "") {
+      socket.emit("join_room", { room, username }); 
+      setShowChat(true);
+      localStorage.setItem("devchat_user", username);
+      localStorage.setItem("devchat_room", room);
+      localStorage.setItem("devchat_show", "true");
+    }
+  };
+
+  const sendMessage = () => {
+    if (message !== "") {
+      const messageData = {
+        room: room, 
+        author: username,
+        text: message,
+        time: new Date(Date.now()).getHours() + ":" + String(new Date(Date.now()).getMinutes()).padStart(2, '0'),
+      };
+
+      socket.emit("send_message", messageData);
+      setMessageList((list) => [...list, messageData]);
+      setMessage("");
+    }
+  };
+
+  const leaveRoom = () => {
+    setShowChat(false);
+    localStorage.removeItem("devchat_user");
+    localStorage.removeItem("devchat_room");
+    localStorage.removeItem("devchat_show");
+    window.location.reload();
+  };
 
   // Theme styles dictionary
   const styles = {
