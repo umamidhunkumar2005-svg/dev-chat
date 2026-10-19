@@ -3,7 +3,6 @@ import io from 'socket.io-client';
 import { playMessageSound } from './notificationSound';
 import './App.css';
 
-// Keep your Render URL here!
 const socket = io.connect("https://dev-chat-server-0dgn.onrender.com");
 
 function App() {
@@ -14,11 +13,36 @@ function App() {
   const [message, setMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const [typingUser, setTypingUser] = useState("");
-  const [activeUsers, setActiveUsers] = useState([]); // Active users list
+  const [activeUsers, setActiveUsers] = useState([]);
+
+  // Theme state: "light", "dark", or "system"
+  const [theme, setTheme] = useState(localStorage.getItem("devchat_theme") || "system");
+  const [resolvedTheme, setResolvedTheme] = useState("light");
+
+  // Handle Theme Resolution (System vs Explicit)
+  useEffect(() => {
+    const rootElement = document.documentElement;
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const updateTheme = () => {
+      let active = theme;
+      if (theme === "system") {
+        active = mediaQuery.matches ? "dark" : "light";
+      }
+      setResolvedTheme(active);
+      localStorage.setItem("devchat_theme", theme);
+    };
+
+    updateTheme();
+
+    if (theme === "system") {
+      mediaQuery.addEventListener("change", updateTheme);
+      return () => mediaQuery.removeEventListener("change", updateTheme);
+    }
+  }, [theme]);
 
   const joinRoom = () => {
     if (username !== "" && room !== "") {
-      // Pass both room and username so the backend tracks who is online accurately
       socket.emit("join_room", { room, username }); 
       setShowChat(true);
       localStorage.setItem("devchat_user", username);
@@ -27,7 +51,6 @@ function App() {
     }
   };
 
-  // If returning to page after refresh, automatically rejoin the room
   useEffect(() => {
     if (showChat && room && username) {
       socket.emit("join_room", { room, username });
@@ -51,14 +74,16 @@ function App() {
 
   const leaveRoom = () => {
     setShowChat(false);
-    localStorage.clear();
+    localStorage.removeItem("devchat_user");
+    localStorage.removeItem("devchat_room");
+    localStorage.removeItem("devchat_show");
     window.location.reload();
   };
 
   useEffect(() => {
     const receiveHandler = (data) => {
       setMessageList((list) => [...list, data]);
-      playMessageSound(); // Play chime when a new message arrives!
+      playMessageSound();
     };
 
     const typingHandler = (authorName) => {
@@ -66,13 +91,8 @@ function App() {
       setTimeout(() => setTypingUser(""), 3000); 
     };
     
-    const historyHandler = (history) => {
-      setMessageList(history);
-    };
-
-    const userListHandler = (users) => {
-      setActiveUsers(users);
-    };
+    const historyHandler = (history) => setMessageList(history);
+    const userListHandler = (users) => setActiveUsers(users);
 
     socket.on("receive_message", receiveHandler);
     socket.on("user_typing", typingHandler);
@@ -87,34 +107,111 @@ function App() {
     };
   }, []);
 
+  // Theme-based style dictionary
+  const styles = {
+    app: {
+      padding: '20px',
+      maxWidth: '650px',
+      margin: '0 auto',
+      fontFamily: 'Inter, sans-serif',
+      color: resolvedTheme === 'dark' ? '#f8fafc' : '#0f172a',
+      minHeight: '100vh',
+      backgroundColor: resolvedTheme === 'dark' ? '#0f172a' : '#f8fafc',
+      transition: 'all 0.3s ease',
+    },
+    card: {
+      border: resolvedTheme === 'dark' ? '1px solid #334155' : '1px solid #cbd5e1',
+      borderRadius: '10px',
+      overflow: 'hidden',
+      backgroundColor: resolvedTheme === 'dark' ? '#1e293b' : '#ffffff',
+      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+    },
+    header: {
+      background: resolvedTheme === 'dark' ? '#0f172a' : '#2c3e50',
+      color: '#fff',
+      padding: '12px 15px',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    sidebar: {
+      width: '160px',
+      borderRight: resolvedTheme === 'dark' ? '1px solid #334155' : '1px solid #e2e8f0',
+      padding: '12px',
+      backgroundColor: resolvedTheme === 'dark' ? '#0f172a' : '#f8f9fa',
+    },
+    chatBox: {
+      height: '340px',
+      overflowY: 'scroll',
+      padding: '15px',
+      textAlign: 'left',
+    },
+    myBubble: {
+      background: resolvedTheme === 'dark' ? '#065f46' : '#DCF8C6',
+      color: resolvedTheme === 'dark' ? '#ecfdf5' : '#000000',
+    },
+    otherBubble: {
+      background: resolvedTheme === 'dark' ? '#334155' : '#EAEAEA',
+      color: resolvedTheme === 'dark' ? '#f8fafc' : '#000000',
+    },
+    inputArea: {
+      display: 'flex',
+      borderTop: resolvedTheme === 'dark' ? '1px solid #334155' : '1px solid #e2e8f0',
+      backgroundColor: resolvedTheme === 'dark' ? '#1e293b' : '#ffffff',
+    },
+    input: {
+      flex: '1',
+      padding: '12px',
+      border: 'none',
+      outline: 'none',
+      backgroundColor: 'transparent',
+      color: resolvedTheme === 'dark' ? '#f8fafc' : '#0f172a',
+    }
+  };
+
   return (
-    <div className="App" style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', fontFamily: 'Arial' }}>
-      <h1>DevChat 🚀</h1>
+    <div style={styles.app}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h1 style={{ margin: 0 }}>DevChat 🚀</h1>
+        
+        {/* Theme Selector Dropdown */}
+        <div>
+          <select 
+            value={theme} 
+            onChange={(e) => setTheme(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', background: resolvedTheme === 'dark' ? '#334155' : '#fff', color: resolvedTheme === 'dark' ? '#fff' : '#000', border: '1px solid #ccc' }}
+          >
+            <option value="light">☀️ Light</option>
+            <option value="dark">🌙 Dark</option>
+            <option value="system">💻 System</option>
+          </select>
+        </div>
+      </div>
 
       {!showChat ? (
-        <div className="joinContainer" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div className="joinContainer" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '400px', margin: '40px auto', padding: '20px', ...styles.card }}>
           <h3>Join a Chat Room</h3>
-          <input type="text" value={username} placeholder="Your Name..." onChange={(e) => setUsername(e.target.value)} style={{ padding: '10px' }} />
-          <input type="text" value={room} placeholder="Room ID (e.g. 123)..." onChange={(e) => setRoom(e.target.value)} style={{ padding: '10px' }} />
-          <button onClick={joinRoom} style={{ padding: '10px', cursor: 'pointer', background: '#2c3e50', color: 'white', border: 'none' }}>Join Room</button>
+          <input type="text" value={username} placeholder="Your Name..." onChange={(e) => setUsername(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }} />
+          <input type="text" value={room} placeholder="Room ID (e.g. 123)..." onChange={(e) => setRoom(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }} />
+          <button onClick={joinRoom} style={{ padding: '10px', cursor: 'pointer', background: '#2c3e50', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}>Join Room</button>
         </div>
       ) : (
-        <div className="chat-window" style={{ border: '1px solid #ccc', borderRadius: '8px', overflow: 'hidden' }}>
+        <div style={styles.card}>
           {/* Header */}
-          <div style={{ background: '#2c3e50', color: 'white', padding: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <p style={{ margin: 0 }}>Live Chat: Room {room}</p>
-            <button onClick={leaveRoom} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Leave</button>
+          <div style={styles.header}>
+            <p style={{ margin: 0, fontWeight: 500 }}>Live Chat: Room {room}</p>
+            <button onClick={leaveRoom} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Leave</button>
           </div>
 
-          {/* Body Container with Sidebar and Chat Box */}
-          <div className="chat-body-container" style={{ display: 'flex', background: '#fff', color: '#000' }}>
+          {/* Body Container */}
+          <div style={{ display: 'flex', background: resolvedTheme === 'dark' ? '#1e293b' : '#fff' }}>
             
             {/* Online Users Sidebar */}
-            <div className="users-sidebar" style={{ width: '150px', borderRight: '1px solid #ccc', padding: '10px', background: '#f8f9fa' }}>
-              <h4 style={{ margin: '0 0 10px 0', fontSize: '14px' }}>🟢 Online ({activeUsers.length})</h4>
+            <div style={styles.sidebar}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', opacity: 0.8 }}>🟢 Online ({activeUsers.length})</h4>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '13px' }}>
                 {activeUsers.map((user) => (
-                  <li key={user.id} style={{ fontWeight: user.username === username ? 'bold' : 'normal', margin: '6px 0' }}>
+                  <li key={user.id} style={{ fontWeight: user.username === username ? 'bold' : 'normal', margin: '6px 0', wordBreak: 'break-all' }}>
                     {user.username} {user.username === username ? "(You)" : ""}
                   </li>
                 ))}
@@ -123,37 +220,45 @@ function App() {
 
             {/* Message Feed Area */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ height: '320px', overflowY: 'scroll', padding: '10px', textAlign: 'left' }}>
+              <div style={styles.chatBox}>
                 {messageList.map((msg, index) => (
                   <div key={index} style={{ margin: '10px 0', textAlign: msg.author === username ? 'right' : 'left' }}>
-                    <div style={{ background: msg.author === username ? '#DCF8C6' : '#EAEAEA', display: 'inline-block', padding: '8px', borderRadius: '10px', maxWidth: '80%', wordBreak: 'break-word' }}>
+                    <div style={{ 
+                      ...(msg.author === username ? styles.myBubble : styles.otherBubble), 
+                      display: 'inline-block', 
+                      padding: '10px 12px', 
+                      borderRadius: '12px', 
+                      maxWidth: '80%', 
+                      wordBreak: 'break-word',
+                      textAlign: 'left'
+                    }}>
                       <p style={{ margin: 0, fontSize: '14px' }}><strong>{msg.author}:</strong> {msg.text}</p>
-                      <span style={{ fontSize: '10px', color: '#888', float: 'right', marginTop: '4px', marginLeft: '8px' }}>{msg.time}</span>
+                      <span style={{ fontSize: '10px', opacity: 0.6, float: 'right', marginTop: '4px', marginLeft: '8px' }}>{msg.time}</span>
                     </div>
                   </div>
                 ))}
                 
                 {typingUser && (
-                  <div style={{ margin: '5px 0', textAlign: 'left', fontStyle: 'italic', color: 'gray', fontSize: '12px' }}>
+                  <div style={{ margin: '5px 0', textAlign: 'left', fontStyle: 'italic', opacity: 0.6, fontSize: '12px' }}>
                     {typingUser} is typing...
                   </div>
                 )}
               </div>
 
               {/* Input Area */}
-              <div style={{ display: 'flex', borderTop: '1px solid #ccc' }}>
+              <div style={styles.inputArea}>
                 <input 
                   type="text" 
                   value={message} 
-                  placeholder="Message..." 
+                  placeholder="Type a message..." 
                   onChange={(e) => setMessage(e.target.value)} 
                   onKeyDown={(e) => {
                     socket.emit("typing", { room: room, author: username });
                     if (e.key === 'Enter') sendMessage();
                   }} 
-                  style={{ flex: '1', padding: '10px', border: 'none', outline: 'none' }} 
+                  style={styles.input} 
                 />
-                <button onClick={sendMessage} style={{ padding: '10px 20px', background: '#2c3e50', color: 'white', border: 'none', cursor: 'pointer' }}>Send</button>
+                <button onClick={sendMessage} style={{ padding: '0 25px', background: '#2c3e50', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Send</button>
               </div>
             </div>
 
