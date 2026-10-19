@@ -71,18 +71,21 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Listen for a message being sent (Optimized for instant delivery)
-  socket.on("send_message", (data) => {
+  // Listen for a message being sent and ensure it saves to DB before broadcasting
+  socket.on("send_message", async (data) => {
     console.log("Message received for room:", data.room);
     
-    // 1. Send to the other user instantly over WebSockets (Zero delay)
-    socket.to(data.room).emit("receive_message", data);
+    // 1. Save to MongoDB first and ensure it succeeds
+    try {
+      const newMessage = new Message(data);
+      await newMessage.save();
+      console.log("💾 Message saved to MongoDB successfully!");
+    } catch (error) {
+      console.log("❌ Error saving message to MongoDB:", error);
+    }
 
-    // 2. Save to MongoDB in the background without blocking the socket emission
-    const newMessage = new Message(data);
-    newMessage.save().catch((error) => {
-      console.log("Error saving message:", error);
-    });
+    // 2. Broadcast to everyone else in the room
+    socket.to(data.room).emit("receive_message", data);
   });
 
   // Listen for a user typing
