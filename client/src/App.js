@@ -25,6 +25,28 @@ function App() {
   const [theme, setTheme] = useState(localStorage.getItem("devchat_theme") || "system");
   const [resolvedTheme, setResolvedTheme] = useState("light");
 
+  // Built-in Web Audio API notification sound (No external files needed!)
+  const playMessageSound = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5 note
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.2);
+    } catch (e) {
+      console.log(e);
+    }
+  };
+
   const leaveRoom = () => {
     setShowChat(false);
     localStorage.removeItem("devchat_user");
@@ -51,6 +73,7 @@ function App() {
   useEffect(() => {
     const receiveHandler = (data) => {
       setMessageList((list) => [...list, data]);
+      playMessageSound(); // Play notification sound when message arrives
     };
 
     const typingHandler = (authorName) => {
