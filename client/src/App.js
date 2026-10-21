@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import io from 'socket.io-client';
 import { playMessageSound } from './notificationSound';
 import './App.css';
@@ -9,6 +9,13 @@ const socket = io.connect("https://dev-chat-server-0dgn.onrender.com", {
   reconnectionAttempts: 5,
   reconnectionDelay: 1000,
 });
+
+const iceServers = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+  ]
+};
 
 function App() {
   const [username, setUsername] = useState(localStorage.getItem("devchat_user") || "");
@@ -21,12 +28,21 @@ function App() {
   const [messageList, setMessageList] = useState([]);
   const [typingUser, setTypingUser] = useState("");
   const [activeUsers, setActiveUsers] = useState([]);
-  const [modalImage, setModalImage] = useState(null); // For fullscreen image viewer
+  const [modalImage, setModalImage] = useState(null);
+
+  // WebRTC Video States
+  const [calling, setCalling] = useState(false);
+  const [incomingCall, setIncomingCall] = useState(null);
+  const [callActive, setCallActive] = useState(false);
+
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const peerConnectionRef = useRef(null);
+  const localStreamRef = useRef(null);
 
   const [theme, setTheme] = useState(localStorage.getItem("devchat_theme") || "system");
   const [resolvedTheme, setResolvedTheme] = useState("light");
 
-  // Handle Theme Resolution
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -47,7 +63,6 @@ function App() {
     }
   }, [theme]);
 
-  // Socket event listeners
   useEffect(() => {
     const receiveHandler = (data) => {
       setMessageList((list) => [...list, data]);
@@ -59,10 +74,7 @@ function App() {
       setTimeout(() => setTypingUser(""), 3000); 
     };
     
-    const historyHandler = (history) => {
-      setMessageList(history);
-    };
-
+    const historyHandler = (history) => setMessageList(history);
     const userListHandler = (users) => setActiveUsers(users);
 
     socket.on("receive_message", receiveHandler);
@@ -70,15 +82,45 @@ function App() {
     socket.on("chat_history", historyHandler);
     socket.on("user_list", userListHandler);
 
+    // WebRTC Socket Listeners
+    socket.on("call_incoming", (data) => {
+      setIncomingCall(data);
+    });
+
+    socket.on("call_accepted", async (data) => {
+      if (peerConnectionRef.current) {
+        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+        setCallActive(true);
+        setCalling(false);
+      }
+    });
+
+    socket.on("ice_candidate", async (candidate) => {
+      if (peerConnectionRef.current && candidate) {
+        try {
+          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.error("Error adding ice candidate", e);
+        }
+      }
+    });
+
+    socket.on("call_ended", () => {
+      closeCallUI();
+    });
+
     return () => {
       socket.off("receive_message", receiveHandler);
       socket.off("user_typing", typingHandler);
       socket.off("chat_history", historyHandler);
       socket.off("user_list", userListHandler);
+      socket.off("call_incoming");
+      socket.off("call_accepted");
+      socket.off("ice_candidate");
+      socket.off("call_ended");
     };
   }, []);
 
-  // Rejoin room/DM on refresh if session exists
   useEffect(() => {
     if (showChat && room && username) {
       socket.emit("join_room", { room, username });
@@ -108,7 +150,6 @@ function App() {
     socket.emit("join_room", { room: dmRoomID, username });
   };
 
-  // Convert uploaded image file to Base64 String
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -139,6 +180,78 @@ function App() {
       setMessage("");
       setSelectedFile(null);
     }
+  };
+
+  // --- WebRTC Functions ---
+  const startVideoCall = async () => {
+    setCalling(true);
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localStreamRef.current = stream;
+    if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+
+    const pc = new RTCPeerConnection(iceServers);
+    peerConnectionRef.current = pc;
+
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+    pc.ontrack = (event) => {
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = event.streams[0];
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("ice_candidate", { room, candidate: event.candidate });
+      }
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    socket.emit("call_user", { room, offer, from: username });
+  };
+
+  const answerVideoCall = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    localStreamRef.current = stream;
+    if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+
+    const pc = new RTCPeerConnection(iceServers);
+    peerConnectionRef.current = pc;
+
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+    pc.ontrack = (event) => {
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = event.streams[0];
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("ice_candidate", { room, candidate: event.candidate });
+      }
+    };
+
+    await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    socket.emit("answer_call", { room, answer });
+    setCallActive(true);
+    setIncomingCall(null);
+  };
+
+  const endVideoCall = () => {
+    socket.emit("end_call", { room });
+    closeCallUI();
+  };
+
+  const closeCallUI = () => {
+    if (peerConnectionRef.current) peerConnectionRef.current.close();
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+    setCalling(false);
+    setCallActive(false);
+    setIncomingCall(null);
   };
 
   const leaveRoom = () => {
@@ -240,8 +353,39 @@ function App() {
         <div style={styles.card}>
           <div style={styles.header}>
             <p style={{ margin: 0, fontWeight: 500 }}>{currentChatTitle || `Room: ${room}`}</p>
-            <button onClick={leaveRoom} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Leave</button>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              {!callActive && !calling && (
+                <button onClick={startVideoCall} style={{ background: '#27ae60', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                  📹 Call
+                </button>
+              )}
+              <button onClick={leaveRoom} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Leave</button>
+            </div>
           </div>
+
+          {/* Incoming Call Notification */}
+          {incomingCall && (
+            <div style={{ padding: '10px', background: '#27ae60', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>📞 Incoming video call from <strong>{incomingCall.from}</strong></span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={answerVideoCall} style={{ background: '#fff', color: '#27ae60', border: 'none', padding: '4px 10px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Accept</button>
+                <button onClick={() => setIncomingCall(null)} style={{ background: '#e74c3c', color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Decline</button>
+              </div>
+            </div>
+          )}
+
+          {/* Video Call Window */}
+          {(calling || callActive) && (
+            <div style={{ padding: '15px', background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', gap: '10px', width: '100%', justifyContent: 'center' }}>
+                <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '45%', borderRadius: '8px', border: '2px solid #27ae60', backgroundColor: '#000' }} />
+                <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '45%', borderRadius: '8px', border: '2px solid #3498db', backgroundColor: '#000' }} />
+              </div>
+              <button onClick={endVideoCall} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold' }}>
+                Hang Up 🔴
+              </button>
+            </div>
+          )}
 
           <div style={{ display: 'flex', background: resolvedTheme === 'dark' ? '#1e293b' : '#fff' }}>
             <div style={styles.sidebar}>
