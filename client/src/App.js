@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 import { playMessageSound } from './notificationSound';
 import './App.css';
@@ -78,6 +78,19 @@ function App() {
       ringtoneIntervalRef.current = null;
     }
   };
+
+  const closeCallUI = useCallback(() => {
+    stopRingtone();
+    if (peerConnectionRef.current) peerConnectionRef.current.close();
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+    setCalling(false);
+    setCallActive(false);
+    setIncomingCall(null);
+    setIsMuted(false);
+    setIsVideoOff(false);
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -161,7 +174,7 @@ function App() {
       socket.off("ice_candidate");
       socket.off("call_ended");
     };
-  }, []);
+  }, [closeCallUI]);
 
   useEffect(() => {
     if (showChat && room && username) {
@@ -330,19 +343,6 @@ function App() {
   const endVideoCall = () => {
     socket.emit("end_call", { room });
     closeCallUI();
-  };
-
-  const closeCallUI = () => {
-    stopRingtone();
-    if (peerConnectionRef.current) peerConnectionRef.current.close();
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-    }
-    setCalling(false);
-    setCallActive(false);
-    setIncomingCall(null);
-    setIsMuted(false);
-    setIsVideoOff(false);
   };
 
   const leaveRoom = () => {
