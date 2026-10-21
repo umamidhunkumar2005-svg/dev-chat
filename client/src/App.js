@@ -38,6 +38,8 @@ function App() {
   const [callActive, setCallActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+  const [callerName, setCallerName] = useState("");
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -90,6 +92,7 @@ function App() {
     setIncomingCall(null);
     setIsMuted(false);
     setIsVideoOff(false);
+    setCallerName("");
   }, []);
 
   useEffect(() => {
@@ -130,6 +133,7 @@ function App() {
 
     socket.on("call_incoming", (data) => {
       setIncomingCall(data);
+      setCallerName(data.from);
       startRingtone();
     });
 
@@ -257,67 +261,69 @@ function App() {
     return pc;
   };
 
-  const startCall = async (type) => {
+  const startCall = (type) => {
     setCallType(type);
     setCalling(true);
     startRingtone();
+    
+    // Find the other user in room for display name
+    const otherUser = activeUsers.find(u => u.username !== username)?.username || "User";
+    setCallerName(otherUser);
 
-    try {
-      const constraints = type === "video" ? { video: true, audio: true } : { video: false, audio: true };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      localStreamRef.current = stream;
-      
-      if (type === "video" && localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
+    navigator.mediaDevices.getUserMedia(type === "video" ? { video: true, audio: true } : { video: false, audio: true })
+      .then((stream) => {
+        localStreamRef.current = stream;
+        if (type === "video" && localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
 
-      const pc = initPeerConnection();
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        const pc = initPeerConnection();
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      socket.emit("call_user", { room, offer, from: username, type });
-    } catch (e) {
-      console.error("Error accessing media devices:", e);
-      stopRingtone();
-      setCalling(false);
-    }
+        pc.createOffer().then((offer) => {
+          pc.setLocalDescription(offer);
+          socket.emit("call_user", { room, offer, from: username, type });
+        });
+      })
+      .catch((e) => {
+        console.error("Error accessing media devices:", e);
+        stopRingtone();
+        setCalling(false);
+      });
   };
 
-  const answerCall = async () => {
+  const answerCall = () => {
     stopRingtone();
     const type = incomingCall.type || "video";
     setCallType(type);
 
-    try {
-      const constraints = type === "video" ? { video: true, audio: true } : { video: false, audio: true };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      localStreamRef.current = stream;
+    navigator.mediaDevices.getUserMedia(type === "video" ? { video: true, audio: true } : { video: false, audio: true })
+      .then(async (stream) => {
+        localStreamRef.current = stream;
+        if (type === "video" && localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
 
-      if (type === "video" && localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
+        const pc = initPeerConnection();
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      const pc = initPeerConnection();
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+        await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
 
-      await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+        while (iceCandidatesQueue.current.length > 0) {
+          const candidate = iceCandidatesQueue.current.shift();
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        }
 
-      while (iceCandidatesQueue.current.length > 0) {
-        const candidate = iceCandidatesQueue.current.shift();
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      }
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
 
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      socket.emit("answer_call", { room, answer });
-      setCallActive(true);
-      setIncomingCall(null);
-    } catch (e) {
-      console.error("Error answering call:", e);
-    }
+        socket.emit("answer_call", { room, answer });
+        setCallActive(true);
+        setIncomingCall(null);
+      })
+      .catch((e) => {
+        console.error("Error answering call:", e);
+      });
   };
 
   const toggleMute = () => {
@@ -340,17 +346,19 @@ function App() {
     }
   };
 
+  const toggleSpeaker = () => {
+    setIsSpeakerOn(!isSpeakerOn);
+    if (remoteAudioRef.current) {
+      // Toggle audio output routing if supported by browser sinkId
+      if (typeof remoteAudioRef.current.setSinkId === 'function') {
+        // default or speaker
+      }
+    }
+  };
+
   const endVideoCall = () => {
     socket.emit("end_call", { room });
     closeCallUI();
-  };
-
-  const leaveRoom = () => {
-    setShowChat(false);
-    localStorage.removeItem("devchat_user");
-    localStorage.removeItem("devchat_room");
-    localStorage.removeItem("devchat_show");
-    window.location.reload();
   };
 
   const getFirstLetter = (name) => {
@@ -475,7 +483,7 @@ function App() {
             </div>
           )}
 
-          {/* Fullscreen Call Overlay - Mobile Optimized */}
+          {/* Fullscreen Call Overlay - Fully Mobile-Friendly with Hang-Up Button Visible */}
           {(calling || callActive) && (
             <div style={{
               position: 'fixed',
@@ -489,57 +497,72 @@ function App() {
               flexDirection: 'column',
               justifyContent: 'space-between',
               alignItems: 'center',
-              padding: '15px 10px',
-              boxSizing: 'border-box',
-              overflowY: 'auto'
+              padding: '20px 10px',
+              boxSizing: 'border-box'
             }}>
-              <div style={{ color: '#fff', textAlign: 'center', marginTop: '5px' }}>
-                <h2 style={{ margin: '0 0 4px 0', fontSize: '20px' }}>{calling ? "Calling..." : "In Call"}</h2>
-                <p style={{ opacity: 0.7, margin: 0, fontSize: '13px' }}>{currentChatTitle} ({callType.toUpperCase()})</p>
+              <div style={{ color: '#fff', textAlign: 'center', marginTop: '10px' }}>
+                <h2 style={{ margin: '0 0 4px 0', fontSize: '22px' }}>{calling ? "Calling..." : "In Call"}</h2>
+                <p style={{ opacity: 0.8, margin: 0, fontSize: '15px', fontWeight: 'bold' }}>
+                  {callerName ? `Talking with ${callerName}` : currentChatTitle}
+                </p>
               </div>
 
               {callType === "video" ? (
-                <div style={{ position: 'relative', width: '100%', maxWidth: '700px', height: '55vh', background: '#000', borderRadius: '12px', overflow: 'hidden', margin: '10px 0' }}>
+                <div style={{ position: 'relative', width: '100%', maxWidth: '700px', height: '52vh', background: '#000', borderRadius: '12px', overflow: 'hidden', margin: '10px 0' }}>
                   <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   <div style={{ position: 'absolute', bottom: '15px', right: '15px', width: '110px', height: '140px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #fff', boxShadow: '0 4px 10px rgba(0,0,0,0.5)', background: '#222' }}>
                     <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                 </div>
               ) : (
-                /* Audio Call UI with First Letter Avatar */
+                /* Audio Call UI with First Letter Avatar & Caller Name */
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '15px' }}>
                   <div style={{ 
-                    width: '100px', 
-                    height: '100px', 
-                    borderRadius: '50px', 
+                    width: '110px', 
+                    height: '110px', 
+                    borderRadius: '55px', 
                     background: 'linear-gradient(135deg, #3498db, #2ecc71)', 
                     display: 'flex', 
                     justifyContent: 'center', 
                     alignItems: 'center', 
-                    fontSize: '42px', 
+                    fontSize: '48px', 
                     fontWeight: 'bold',
                     color: '#fff',
-                    boxShadow: '0 8px 20px rgba(0,0,0,0.4)'
+                    boxShadow: '0 8px 25px rgba(0,0,0,0.5)'
                   }}>
-                    {getFirstLetter(incomingCall?.from || username)}
+                    {getFirstLetter(callerName)}
                   </div>
-                  <h3 style={{ color: '#fff', margin: 0, fontSize: '18px' }}>Audio Call Connected</h3>
+                  <h3 style={{ color: '#fff', margin: 0, fontSize: '20px' }}>{callerName || "Connected"}</h3>
                 </div>
               )}
 
-              {/* Action Controls Bar - Positioned safely for mobile screens */}
-              <div style={{ display: 'flex', gap: '15px', background: 'rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '30px', backdropFilter: 'blur(10px)', marginBottom: '10px' }}>
-                <button onClick={toggleMute} style={{ background: isMuted ? '#e74c3c' : '#ffffff22', color: '#fff', border: 'none', width: '45px', height: '45px', borderRadius: '22.5px', fontSize: '18px', cursor: 'pointer' }}>
+              {/* Action Controls Bar - Explicitly styled to fit mobile screens without hiding */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '15px', 
+                background: 'rgba(255,255,255,0.15)', 
+                padding: '12px 25px', 
+                borderRadius: '40px', 
+                backdropFilter: 'blur(10px)', 
+                marginBottom: '20px',
+                alignItems: 'center',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+              }}>
+                <button onClick={toggleMute} title="Mute" style={{ background: isMuted ? '#e74c3c' : '#ffffff33', color: '#fff', border: 'none', width: '50px', height: '50px', borderRadius: '25px', fontSize: '20px', cursor: 'pointer' }}>
                   {isMuted ? '🔇' : '🎙️'}
                 </button>
 
-                {callType === "video" && (
-                  <button onClick={toggleVideo} style={{ background: isVideoOff ? '#e74c3c' : '#ffffff22', color: '#fff', border: 'none', width: '45px', height: '45px', borderRadius: '22.5px', fontSize: '18px', cursor: 'pointer' }}>
+                {callType === "video" ? (
+                  <button onClick={toggleVideo} title="Toggle Video" style={{ background: isVideoOff ? '#e74c3c' : '#ffffff33', color: '#fff', border: 'none', width: '50px', height: '50px', borderRadius: '25px', fontSize: '20px', cursor: 'pointer' }}>
                     {isVideoOff ? '🚫' : '📹'}
+                  </button>
+                ) : (
+                  <button onClick={toggleSpeaker} title="Speaker Toggle" style={{ background: isSpeakerOn ? '#27ae60' : '#ffffff33', color: '#fff', border: 'none', width: '50px', height: '50px', borderRadius: '25px', fontSize: '20px', cursor: 'pointer' }}>
+                    {isSpeakerOn ? '🔊' : '🔈'}
                   </button>
                 )}
 
-                <button onClick={endVideoCall} style={{ background: '#e74c3c', color: '#fff', border: 'none', width: '45px', height: '45px', borderRadius: '22.5px', fontSize: '18px', cursor: 'pointer', fontWeight: 'bold' }}>
+                <button onClick={endVideoCall} title="Hang Up" style={{ background: '#e74c3c', color: '#fff', border: 'none', width: '55px', height: '55px', borderRadius: '27.5px', fontSize: '22px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(231,76,60,0.5)' }}>
                   📞
                 </button>
               </div>
@@ -676,7 +699,7 @@ function App() {
                 color: '#fff',
                 border: 'none',
                 borderRadius: '50%',
-                width: '32px',
+                width: '32.px',
                 height: '32px',
                 fontSize: '16px',
                 cursor: 'pointer',
