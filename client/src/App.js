@@ -10,15 +10,6 @@ const socket = io.connect("https://dev-chat-server-0dgn.onrender.com", {
   reconnectionDelay: 1000,
 });
 
-const iceServers = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-    { urls: "stun:stun2.l.google.com:19302" },
-    { urls: "stun:stun3.l.google.com:19302" }
-  ]
-};
-
 function App() {
   const [username, setUsername] = useState(localStorage.getItem("devchat_user") || "");
   const [room, setRoom] = useState(localStorage.getItem("devchat_room") || ""); 
@@ -32,64 +23,8 @@ function App() {
   const [activeUsers, setActiveUsers] = useState([]);
   const [modalImage, setModalImage] = useState(null);
 
-  const [callType, setCallType] = useState("video");
-  const [calling, setCalling] = useState(false);
-  const [incomingCall, setIncomingCall] = useState(null);
-  const [callActive, setCallActive] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-  const [callerName, setCallerName] = useState("");
-
-  const localVideoRef = useRef(null);
-  const remoteVideoRef = useRef(null);
-  const remoteAudioRef = useRef(null);
-  const peerConnectionRef = useRef(null);
-  const localStreamRef = useRef(null);
-  const iceCandidatesQueue = useRef([]);
-  const ringtoneIntervalRef = useRef(null);
-
   const [theme, setTheme] = useState(localStorage.getItem("devchat_theme") || "system");
   const [resolvedTheme, setResolvedTheme] = useState("light");
-
-  const startRingtone = () => {
-    try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === "suspended") { audioCtx.resume(); }
-      ringtoneIntervalRef.current = setInterval(() => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.8);
-      }, 1500);
-    } catch (e) { console.log(e); }
-  };
-
-  const stopRingtone = () => {
-    if (ringtoneIntervalRef.current) {
-      clearInterval(ringtoneIntervalRef.current);
-      ringtoneIntervalRef.current = null;
-    }
-  };
-
-  const closeCallUI = useCallback(() => {
-    stopRingtone();
-    if (peerConnectionRef.current) peerConnectionRef.current.close();
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-    }
-    setCalling(false);
-    setCallActive(false);
-    setIncomingCall(null);
-    setIsMuted(false);
-    setIsVideoOff(false);
-    setCallerName("");
-  }, []);
 
   const leaveRoom = () => {
     setShowChat(false);
@@ -133,51 +68,13 @@ function App() {
     socket.on("chat_history", historyHandler);
     socket.on("user_list", userListHandler);
 
-    socket.on("call_incoming", (data) => {
-      setIncomingCall(data);
-      setCallerName(data.from);
-      setCallType(data.type || "audio"); // FIXED: Fallback to audio properly
-      startRingtone();
-    });
-
-    socket.on("call_accepted", async (data) => {
-      stopRingtone();
-      if (peerConnectionRef.current) {
-        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-        while (iceCandidatesQueue.current.length > 0) {
-          const candidate = iceCandidatesQueue.current.shift();
-          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-        }
-        setCallActive(true);
-        setCalling(false);
-      }
-    });
-
-    socket.on("ice_candidate", async (candidate) => {
-      if (candidate) {
-        if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
-          try {
-            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch (e) { console.error(e); }
-        } else {
-          iceCandidatesQueue.current.push(candidate);
-        }
-      }
-    });
-
-    socket.on("call_ended", () => { closeCallUI(); });
-
     return () => {
       socket.off("receive_message", receiveHandler);
       socket.off("user_typing", typingHandler);
       socket.off("chat_history", historyHandler);
       socket.off("user_list", userListHandler);
-      socket.off("call_incoming");
-      socket.off("call_accepted");
-      socket.off("ice_candidate");
-      socket.off("call_ended");
     };
-  }, [closeCallUI]);
+  }, []);
 
   useEffect(() => {
     if (showChat && room && username) {
@@ -235,126 +132,11 @@ function App() {
     }
   };
 
-  const initPeerConnection = () => {
-    const pc = new RTCPeerConnection(iceServers);
-    peerConnectionRef.current = pc;
-
-    pc.ontrack = (event) => {
-      if (remoteVideoRef.current && event.streams[0]) {
-        remoteVideoRef.current.srcObject = event.streams[0];
-      }
-      if (remoteAudioRef.current && event.streams[0]) {
-        remoteAudioRef.current.srcObject = event.streams[0];
-      }
-    };
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("ice_candidate", { room, candidate: event.candidate });
-      }
-    };
-
-    return pc;
-  };
-
-  const startCall = (type) => {
-    setCallType(type);
-    setCalling(true);
-    startRingtone();
-    
-    const otherUser = activeUsers.find(u => u.username !== username)?.username || "User";
-    setCallerName(otherUser);
-
-    navigator.mediaDevices.getUserMedia(type === "video" ? { video: true, audio: true } : { video: false, audio: true })
-      .then((stream) => {
-        localStreamRef.current = stream;
-        if (type === "video" && localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-
-        const pc = initPeerConnection();
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-        pc.createOffer().then((offer) => {
-          pc.setLocalDescription(offer);
-          socket.emit("call_user", { room, offer, from: username, type });
-        });
-      })
-      .catch((e) => {
-        console.error(e);
-        stopRingtone();
-        setCalling(false);
-      });
-  };
-
-  const answerCall = () => {
-    stopRingtone();
-    const type = incomingCall?.type || "audio"; // FIXED: Fallback to audio properly
-    setCallType(type);
-
-    navigator.mediaDevices.getUserMedia(type === "video" ? { video: true, audio: true } : { video: false, audio: true })
-      .then(async (stream) => {
-        localStreamRef.current = stream;
-        if (type === "video" && localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-
-        const pc = initPeerConnection();
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-        await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
-
-        while (iceCandidatesQueue.current.length > 0) {
-          const candidate = iceCandidatesQueue.current.shift();
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
-        }
-
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        socket.emit("answer_call", { room, answer });
-        setCallActive(true);
-        setIncomingCall(null);
-      })
-      .catch((e) => { console.error(e); });
-  };
-
-  const toggleMute = () => {
-    if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMuted(!audioTrack.enabled);
-      }
-    }
-  };
-
-  const toggleVideo = () => {
-    if (localStreamRef.current && callType === "video") {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsVideoOff(!videoTrack.enabled);
-      }
-    }
-  };
-
-  const toggleSpeaker = () => { setIsSpeakerOn(!isSpeakerOn); };
-
-  const endVideoCall = () => {
-    socket.emit("end_call", { room });
-    closeCallUI();
-  };
-
-  const getFirstLetter = (name) => {
-    return name ? name.charAt(0).toUpperCase() : "?";
-  };
-
   const styles = {
     app: {
       padding: "20px", maxWidth: "720px", margin: "0 auto", fontFamily: "Inter, sans-serif",
       color: resolvedTheme === "dark" ? "#f8fafc" : "#0f172a", minHeight: "100vh",
-      backgroundColor: resolvedTheme === "dark" ? "#0f172a" : "#f8fafc", transition: "all 0.3s ease",
+      backgroundColor: resolvedTheme === "dark" ? "#0f172a" : "#f8f9fa", transition: "all 0.3s ease",
     },
     card: {
       border: resolvedTheme === "dark" ? "1px solid #334155" : "1px solid #cbd5e1",
@@ -392,8 +174,6 @@ function App() {
 
   return (
     <div style={styles.app}>
-      <audio ref={remoteAudioRef} autoPlay />
-
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
         <h1 style={{ margin: 0 }}>DevChat 🚀</h1>
         <div>
@@ -421,89 +201,9 @@ function App() {
           <div style={styles.header}>
             <p style={{ margin: 0, fontWeight: 500 }}>{currentChatTitle || `Room: ${room}`}</p>
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              {!callActive && !calling && (
-                <>
-                  <button onClick={() => startCall("audio")} title="Voice Call" style={{ background: "#3498db", color: "white", border: "none", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}>
-                    📞 Voice Call
-                  </button>
-                  <button onClick={() => startCall("video")} title="Video Call" style={{ background: "#27ae60", color: "white", border: "none", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}>
-                    📹 Video Call
-                  </button>
-                </>
-              )}
               <button onClick={leaveRoom} style={{ background: "#e74c3c", color: "white", border: "none", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}>Leave</button>
             </div>
           </div>
-
-          {incomingCall && (
-            <div style={{ padding: "12px 15px", background: "#27ae60", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 4px 6px rgba(0,0,0,0.2)" }}>
-              <span>🔔 Incoming {incomingCall.type || "audio"} call from <strong>{incomingCall.from}</strong></span>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button onClick={answerCall} style={{ background: "#fff", color: "#27ae60", border: "none", padding: "6px 12px", borderRadius: "4px", fontWeight: "bold", cursor: "pointer" }}>Accept</button>
-                <button onClick={() => { stopRingtone(); setIncomingCall(null); }} style={{ background: "#e74c3c", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "4px", fontWeight: "bold", cursor: "pointer" }}>Decline</button>
-              </div>
-            </div>
-          )}
-
-          {(calling || callActive) && (
-            <div style={{
-              position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",
-              backgroundColor: "#0f172a", zIndex: 9999, display: "flex", flexDirection: "column",
-              justifyContent: "space-between", alignItems: "center", padding: "15px 10px", boxSizing: "border-box"
-            }}>
-              <div style={{ color: "#fff", textAlign: "center", marginTop: "5px" }}>
-                <h2 style={{ margin: "0 0 2px 0", fontSize: "18px" }}>{calling ? "Calling..." : "In Call"}</h2>
-                <p style={{ opacity: 0.8, margin: 0, fontSize: "14px", fontWeight: "bold" }}>
-                  {callerName ? `Talking with ${callerName}` : currentChatTitle} ({callType.toUpperCase()})
-                </p>
-              </div>
-
-              {callType === "video" ? (
-                <div style={{ position: "relative", width: "100%", maxWidth: "700px", height: "52vh", background: "#000", borderRadius: "12px", overflow: "hidden", margin: "5px 0" }}>
-                  <video ref={remoteVideoRef} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  <div style={{ position: "absolute", bottom: "15px", right: "15px", width: "100px", height: "130px", borderRadius: "8px", overflow: "hidden", border: "2px solid #fff", boxShadow: "0 4px 10px rgba(0,0,0,0.5)", background: "#222" }}>
-                    <video ref={localVideoRef} autoPlay playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, gap: "12px" }}>
-                  <div style={{ 
-                    width: "100px", height: "100px", borderRadius: "50px", 
-                    background: "linear-gradient(135deg, #3498db, #2ecc71)", 
-                    display: "flex", justifyContent: "center", alignItems: "center", 
-                    fontSize: "42px", fontWeight: "bold", color: "#fff", boxShadow: "0 8px 25px rgba(0,0,0,0.5)"
-                  }}>
-                    {getFirstLetter(callerName)}
-                  </div>
-                  <h3 style={{ color: "#fff", margin: 0, fontSize: "18px" }}>{callerName || "Connected"}</h3>
-                </div>
-              )}
-
-              <div style={{ 
-                display: "flex", gap: "12px", background: "rgba(255,255,255,0.15)", 
-                padding: "10px 20px", borderRadius: "30px", backdropFilter: "blur(10px)", 
-                marginBottom: "10px", alignItems: "center", boxShadow: "0 10px 30px rgba(0,0,0,0.5)"
-              }}>
-                <button onClick={toggleMute} title="Mute" style={{ background: isMuted ? "#e74c3c" : "#ffffff33", color: "#fff", border: "none", width: "45px", height: "45px", borderRadius: "22.5px", fontSize: "18px", cursor: "pointer" }}>
-                  {isMuted ? "🔇" : "🎙️"}
-                </button>
-
-                {callType === "video" ? (
-                  <button onClick={toggleVideo} title="Toggle Video" style={{ background: isVideoOff ? "#e74c3c" : "#ffffff33", color: "#fff", border: "none", width: "45px", height: "45px", borderRadius: "22.5px", fontSize: "18px", cursor: "pointer" }}>
-                    {isVideoOff ? "🚫" : "📹"}
-                  </button>
-                ) : (
-                  <button onClick={toggleSpeaker} title="Speaker Toggle" style={{ background: isSpeakerOn ? "#27ae60" : "#ffffff33", color: "#fff", border: "none", width: "45px", height: "45px", borderRadius: "22.5px", fontSize: "18px", cursor: "pointer" }}>
-                    {isSpeakerOn ? "🔊" : "🔈"}
-                  </button>
-                )}
-
-                <button onClick={endVideoCall} title="Hang Up" style={{ background: "#e74c3c", color: "#fff", border: "none", width: "48px", height: "48px", borderRadius: "24px", fontSize: "20px", cursor: "pointer", fontWeight: "bold", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(231,76,60,0.5)" }}>
-                  📞
-                </button>
-              </div>
-            </div>
-          )}
 
           <div style={{ display: "flex", background: resolvedTheme === "dark" ? "#1e293b" : "#fff" }}>
             <div style={styles.sidebar}>
