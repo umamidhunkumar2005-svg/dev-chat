@@ -15,7 +15,7 @@ function App() {
   const [room, setRoom] = useState(localStorage.getItem("devchat_room") || ""); 
   const [showChat, setShowChat] = useState(localStorage.getItem("devchat_show") === "true");
   
-  const [currentChatTitle, setCurrentChatTitle] = useState(localStorage.getItem("devchat_room") || "");
+  const [currentChatTitle, setCurrentChatTitle] = useState(localStorage.getItem("devchat_room") ? `Room: ${localStorage.getItem("devchat_room")}` : "");
   const [message, setMessage] = useState("");
   const [messageList, setMessageList] = useState([]);
   const [typingUser, setTypingUser] = useState("");
@@ -96,25 +96,15 @@ function App() {
 
   // Function to start a Private Direct Message with another user
   const startDM = (targetUser) => {
-    if (targetUser === username) return; // Can't DM yourself
+    if (targetUser === username) return;
 
-    // Create a unique deterministic room ID by sorting both names alphabetically
     const sortedUsers = [username, targetUser].sort();
     const dmRoomID = `dm_${sortedUsers[0]}_${sortedUsers[1]}`;
 
     setRoom(dmRoomID);
     setCurrentChatTitle(`DM with ${targetUser}`);
-    setMessageList([]); // Clear screen temporarily while history loads
+    setMessageList([]); 
     socket.emit("join_room", { room: dmRoomID, username });
-  };
-
-  // Function to switch back to the main group room
-  const switchToGroupRoom = (groupRoomId) => {
-    setRoom(groupRoomId);
-    setCurrentChatTitle(`Room: ${groupRoomId}`);
-    setMessageList([]);
-    socket.emit("join_room", { room: groupRoomId, username });
-    localStorage.setItem("devchat_room", groupRoomId);
   };
 
   const sendMessage = () => {
@@ -140,7 +130,6 @@ function App() {
     window.location.reload();
   };
 
-  // Theme styles dictionary
   const styles = {
     app: {
       padding: '20px',
@@ -223,13 +212,13 @@ function App() {
         <div className="joinContainer" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: '400px', margin: '40px auto', padding: '20px', ...styles.card }}>
           <h3>Join a Chat Room</h3>
           <input type="text" value={username} placeholder="Your Name..." onChange={(e) => setUsername(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }} />
-          <input type="text" value={room} placeholder="Room ID (e.g. 77777)..." onChange={(e) => setRoom(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }} />
+          <input type="text" value={room} placeholder="Room ID (e.g. 123)..." onChange={(e) => setRoom(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #ccc' }} />
           <button onClick={joinRoom} style={{ padding: '10px', cursor: 'pointer', background: '#2c3e50', color: 'white', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}>Join Room</button>
         </div>
       ) : (
         <div style={styles.card}>
           <div style={styles.header}>
-            <p style={{ margin: 0, fontWeight: 500 }}>{currentChatTitle}</p>
+            <p style={{ margin: 0, fontWeight: 500 }}>{currentChatTitle || `Room: ${room}`}</p>
             <button onClick={leaveRoom} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Leave</button>
           </div>
 
