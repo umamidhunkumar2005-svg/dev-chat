@@ -32,8 +32,7 @@ function App() {
   const [activeUsers, setActiveUsers] = useState([]);
   const [modalImage, setModalImage] = useState(null);
 
-  // Call States
-  const [callType, setCallType] = useState("video"); // "video" or "audio"
+  const [callType, setCallType] = useState("video");
   const [calling, setCalling] = useState(false);
   const [incomingCall, setIncomingCall] = useState(null);
   const [callActive, setCallActive] = useState(false);
@@ -51,7 +50,6 @@ function App() {
   const [theme, setTheme] = useState(localStorage.getItem("devchat_theme") || "system");
   const [resolvedTheme, setResolvedTheme] = useState("light");
 
-  // Ringtone Sound Generator using Web Audio API
   const startRingtone = () => {
     try {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -222,7 +220,6 @@ function App() {
     }
   };
 
-  // --- Call Management ---
   const initPeerConnection = () => {
     const pc = new RTCPeerConnection(iceServers);
     peerConnectionRef.current = pc;
@@ -462,7 +459,6 @@ function App() {
             </div>
           </div>
 
-          {/* Incoming Call Notification */}
           {incomingCall && (
             <div style={{ padding: '12px 15px', background: '#27ae60', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' }}>
               <span>🔔 Incoming {incomingCall.type || 'video'} call from <strong>{incomingCall.from}</strong></span>
@@ -473,7 +469,6 @@ function App() {
             </div>
           )}
 
-          {/* WhatsApp / Instagram Style Fullscreen Call View Overlay */}
           {(calling || callActive) && (
             <div style={{
               position: 'fixed',
@@ -496,16 +491,12 @@ function App() {
 
               {callType === "video" ? (
                 <div style={{ position: 'relative', width: '90%', maxWidth: '800px', height: '65vh', background: '#000', borderRadius: '16px', overflow: 'hidden' }}>
-                  {/* Remote Stream (Main Screen) */}
                   <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  
-                  {/* Local Stream (PiP Corner) */}
                   <div style={{ position: 'absolute', bottom: '20px', right: '20px', width: '140px', height: '180px', borderRadius: '12px', overflow: 'hidden', border: '2px solid #fff', boxShadow: '0 4px 10px rgba(0,0,0,0.5)', background: '#222' }}>
                     <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                 </div>
               ) : (
-                /* Audio Call UI Display */
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
                   <div style={{ width: '120px', height: '120px', borderRadius: '60px', background: '#2c3e50', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '48px', color: '#fff' }}>
                     👤
@@ -514,7 +505,6 @@ function App() {
                 </div>
               )}
 
-              {/* Action Controls Bar */}
               <div style={{ display: 'flex', gap: '20px', background: 'rgba(255,255,255,0.1)', padding: '12px 24px', borderRadius: '30px', backdropFilter: 'blur(10px)' }}>
                 <button onClick={toggleMute} style={{ background: isMuted ? '#e74c3c' : '#ffffff22', color: '#fff', border: 'none', width: '50px', height: '50px', borderRadius: '25px', fontSize: '20px', cursor: 'pointer' }}>
                   {isMuted ? '🔇' : '🎙️'}
@@ -630,7 +620,6 @@ function App() {
         </div>
       )}
 
-      {/* Fullscreen Image Preview Modal */}
       {modalImage && (
         <div 
           onClick={() => setModalImage(null)}
@@ -642,7 +631,7 @@ function App() {
             height: '100vh',
             backgroundColor: 'rgba(0, 0, 0, 0.85)',
             display: 'flex',
-            justify.content: 'center',
+            justifyContent: 'center',
             alignItems: 'center',
             zIndex: 1000,
             cursor: 'pointer'
