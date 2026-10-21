@@ -136,7 +136,7 @@ function App() {
     socket.on("call_incoming", (data) => {
       setIncomingCall(data);
       setCallerName(data.from);
-      setCallType(data.type || "video");
+      setCallType(data.type || "audio"); // FIXED: Fallback to audio properly
       startRingtone();
     });
 
@@ -289,7 +289,7 @@ function App() {
 
   const answerCall = () => {
     stopRingtone();
-    const type = incomingCall?.type || "video";
+    const type = incomingCall?.type || "audio"; // FIXED: Fallback to audio properly
     setCallType(type);
 
     navigator.mediaDevices.getUserMedia(type === "video" ? { video: true, audio: true } : { video: false, audio: true })
@@ -437,7 +437,7 @@ function App() {
 
           {incomingCall && (
             <div style={{ padding: "12px 15px", background: "#27ae60", color: "#fff", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 4px 6px rgba(0,0,0,0.2)" }}>
-              <span>🔔 Incoming {incomingCall.type || "video"} call from <strong>{incomingCall.from}</strong></span>
+              <span>🔔 Incoming {incomingCall.type || "audio"} call from <strong>{incomingCall.from}</strong></span>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button onClick={answerCall} style={{ background: "#fff", color: "#27ae60", border: "none", padding: "6px 12px", borderRadius: "4px", fontWeight: "bold", cursor: "pointer" }}>Accept</button>
                 <button onClick={() => { stopRingtone(); setIncomingCall(null); }} style={{ background: "#e74c3c", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "4px", fontWeight: "bold", cursor: "pointer" }}>Decline</button>
