@@ -53,18 +53,20 @@ function App() {
   const startRingtone = () => {
     try {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
       ringtoneIntervalRef.current = setInterval(() => {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
-        osc.stop(audioCtx.currentTime + 1);
-      }, 2000);
+        osc.stop(audioCtx.currentTime + 0.8);
+      }, 1500);
     } catch (e) {
       console.log("Ringtone error:", e);
     }
@@ -447,11 +449,11 @@ function App() {
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               {!callActive && !calling && (
                 <>
-                  <button onClick={() => startCall("audio")} title="Voice Call" style={{ background: '#3498db', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-                    📞 Voice
+                  <button onClick={() => startCall("audio")} title="Voice Call" style={{ background: '#3498db', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    📞 Voice Call
                   </button>
-                  <button onClick={() => startCall("video")} title="Video Call" style={{ background: '#27ae60', color: 'white', border: 'none', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-                    📹 Video
+                  <button onClick={() => startCall("video")} title="Video Call" style={{ background: '#27ae60', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    📹 Video Call
                   </button>
                 </>
               )}
@@ -486,7 +488,7 @@ function App() {
             }}>
               <div style={{ color: '#fff', textAlign: 'center', marginTop: '10px' }}>
                 <h2>{calling ? "Calling..." : "In Call"}</h2>
-                <p style={{ opacity: 0.7 }}>{currentChatTitle}</p>
+                <p style={{ opacity: 0.7 }}>{currentChatTitle} ({callType.toUpperCase()})</p>
               </div>
 
               {callType === "video" ? (
@@ -499,9 +501,9 @@ function App() {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
                   <div style={{ width: '120px', height: '120px', borderRadius: '60px', background: '#2c3e50', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '48px', color: '#fff' }}>
-                    👤
+                    🎙️
                   </div>
-                  <h3 style={{ color: '#fff' }}>Voice Call Connected</h3>
+                  <h3 style={{ color: '#fff' }}>Audio Call Connected</h3>
                 </div>
               )}
 
