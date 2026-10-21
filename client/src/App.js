@@ -134,6 +134,7 @@ function App() {
     socket.on("call_incoming", (data) => {
       setIncomingCall(data);
       setCallerName(data.from);
+      setCallType(data.type || "video");
       startRingtone();
     });
 
@@ -266,7 +267,6 @@ function App() {
     setCalling(true);
     startRingtone();
     
-    // Find the other user in room for display name
     const otherUser = activeUsers.find(u => u.username !== username)?.username || "User";
     setCallerName(otherUser);
 
@@ -294,7 +294,7 @@ function App() {
 
   const answerCall = () => {
     stopRingtone();
-    const type = incomingCall.type || "video";
+    const type = incomingCall?.type || "video";
     setCallType(type);
 
     navigator.mediaDevices.getUserMedia(type === "video" ? { video: true, audio: true } : { video: false, audio: true })
@@ -348,12 +348,6 @@ function App() {
 
   const toggleSpeaker = () => {
     setIsSpeakerOn(!isSpeakerOn);
-    if (remoteAudioRef.current) {
-      // Toggle audio output routing if supported by browser sinkId
-      if (typeof remoteAudioRef.current.setSinkId === 'function') {
-        // default or speaker
-      }
-    }
   };
 
   const endVideoCall = () => {
@@ -483,7 +477,7 @@ function App() {
             </div>
           )}
 
-          {/* Fullscreen Call Overlay - Fully Mobile-Friendly with Hang-Up Button Visible */}
+          {/* Fullscreen Call Overlay - Mobile Optimized & Fully Visible Buttons */}
           {(calling || callActive) && (
             <div style={{
               position: 'fixed',
@@ -497,72 +491,72 @@ function App() {
               flexDirection: 'column',
               justifyContent: 'space-between',
               alignItems: 'center',
-              padding: '20px 10px',
+              padding: '15px 10px',
               boxSizing: 'border-box'
             }}>
-              <div style={{ color: '#fff', textAlign: 'center', marginTop: '10px' }}>
-                <h2 style={{ margin: '0 0 4px 0', fontSize: '22px' }}>{calling ? "Calling..." : "In Call"}</h2>
-                <p style={{ opacity: 0.8, margin: 0, fontSize: '15px', fontWeight: 'bold' }}>
-                  {callerName ? `Talking with ${callerName}` : currentChatTitle}
+              <div style={{ color: '#fff', textAlign: 'center', marginTop: '5px' }}>
+                <h2 style={{ margin: '0 0 2px 0', fontSize: '18px' }}>{calling ? "Calling..." : "In Call"}</h2>
+                <p style={{ opacity: 0.8, margin: 0, fontSize: '14px', fontWeight: 'bold' }}>
+                  {callerName ? `Talking with ${callerName}` : currentChatTitle} ({callType.toUpperCase()})
                 </p>
               </div>
 
               {callType === "video" ? (
-                <div style={{ position: 'relative', width: '100%', maxWidth: '700px', height: '52vh', background: '#000', borderRadius: '12px', overflow: 'hidden', margin: '10px 0' }}>
+                <div style={{ position: 'relative', width: '100%', maxWidth: '700px', height: '52vh', background: '#000', borderRadius: '12px', overflow: 'hidden', margin: '5px 0' }}>
                   <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <div style={{ position: 'absolute', bottom: '15px', right: '15px', width: '110px', height: '140px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #fff', boxShadow: '0 4px 10px rgba(0,0,0,0.5)', background: '#222' }}>
+                  <div style={{ position: 'absolute', bottom: '15px', right: '15px', width: '100px', height: '130px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #fff', boxShadow: '0 4px 10px rgba(0,0,0,0.5)', background: '#222' }}>
                     <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                 </div>
               ) : (
-                /* Audio Call UI with First Letter Avatar & Caller Name */
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '15px' }}>
+                /* Audio Call UI with First Letter Avatar & Name */
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '12px' }}>
                   <div style={{ 
-                    width: '110px', 
-                    height: '110px', 
-                    borderRadius: '55px', 
+                    width: '100px', 
+                    height: '100px', 
+                    borderRadius: '50px', 
                     background: 'linear-gradient(135deg, #3498db, #2ecc71)', 
                     display: 'flex', 
                     justifyContent: 'center', 
                     alignItems: 'center', 
-                    fontSize: '48px', 
+                    fontSize: '42px', 
                     fontWeight: 'bold',
                     color: '#fff',
                     boxShadow: '0 8px 25px rgba(0,0,0,0.5)'
                   }}>
                     {getFirstLetter(callerName)}
                   </div>
-                  <h3 style={{ color: '#fff', margin: 0, fontSize: '20px' }}>{callerName || "Connected"}</h3>
+                  <h3 style={{ color: '#fff', margin: 0, fontSize: '18px' }}>{callerName || "Connected"}</h3>
                 </div>
               )}
 
-              {/* Action Controls Bar - Explicitly styled to fit mobile screens without hiding */}
+              {/* Action Controls Bar - Positioned safely inside screen bounds */}
               <div style={{ 
                 display: 'flex', 
-                gap: '15px', 
+                gap: '12px', 
                 background: 'rgba(255,255,255,0.15)', 
-                padding: '12px 25px', 
-                borderRadius: '40px', 
+                padding: '10px 20px', 
+                borderRadius: '30px', 
                 backdropFilter: 'blur(10px)', 
-                marginBottom: '20px',
+                marginBottom: '10px',
                 alignItems: 'center',
                 boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
               }}>
-                <button onClick={toggleMute} title="Mute" style={{ background: isMuted ? '#e74c3c' : '#ffffff33', color: '#fff', border: 'none', width: '50px', height: '50px', borderRadius: '25px', fontSize: '20px', cursor: 'pointer' }}>
+                <button onClick={toggleMute} title="Mute" style={{ background: isMuted ? '#e74c3c' : '#ffffff33', color: '#fff', border: 'none', width: '45px', height: '45px', borderRadius: '22.5px', fontSize: '18px', cursor: 'pointer' }}>
                   {isMuted ? '🔇' : '🎙️'}
                 </button>
 
                 {callType === "video" ? (
-                  <button onClick={toggleVideo} title="Toggle Video" style={{ background: isVideoOff ? '#e74c3c' : '#ffffff33', color: '#fff', border: 'none', width: '50px', height: '50px', borderRadius: '25px', fontSize: '20px', cursor: 'pointer' }}>
+                  <button onClick={toggleVideo} title="Toggle Video" style={{ background: isVideoOff ? '#e74c3c' : '#ffffff33', color: '#fff', border: 'none', width: '45px', height: '45px', borderRadius: '22.5px', fontSize: '18px', cursor: 'pointer' }}>
                     {isVideoOff ? '🚫' : '📹'}
                   </button>
                 ) : (
-                  <button onClick={toggleSpeaker} title="Speaker Toggle" style={{ background: isSpeakerOn ? '#27ae60' : '#ffffff33', color: '#fff', border: 'none', width: '50px', height: '50px', borderRadius: '25px', fontSize: '20px', cursor: 'pointer' }}>
+                  <button onClick={toggleSpeaker} title="Speaker Toggle" style={{ background: isSpeakerOn ? '#27ae60' : '#ffffff33', color: '#fff', border: 'none', width: '45px', height: '45px', borderRadius: '22.5px', fontSize: '18px', cursor: 'pointer' }}>
                     {isSpeakerOn ? '🔊' : '🔈'}
                   </button>
                 )}
 
-                <button onClick={endVideoCall} title="Hang Up" style={{ background: '#e74c3c', color: '#fff', border: 'none', width: '55px', height: '55px', borderRadius: '27.5px', fontSize: '22px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(231,76,60,0.5)' }}>
+                <button onClick={endVideoCall} title="Hang Up" style={{ background: '#e74c3c', color: '#fff', border: 'none', width: '48px', height: '48px', borderRadius: '24px', fontSize: '20px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(231,76,60,0.5)' }}>
                   📞
                 </button>
               </div>
@@ -699,7 +693,7 @@ function App() {
                 color: '#fff',
                 border: 'none',
                 borderRadius: '50%',
-                width: '32.px',
+                width: '32px',
                 height: '32px',
                 fontSize: '16px',
                 cursor: 'pointer',
