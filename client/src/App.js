@@ -288,7 +288,9 @@ function App() {
                           <img 
                             src={msg.file} 
                             alt="shared-media" 
-                            style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', display: 'block' }} 
+                            title="Click to view full image"
+                            onClick={() => window.open(msg.file, '_blank')}
+                            style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', display: 'block', cursor: 'pointer' }} 
                           />
                         </div>
                       )}
