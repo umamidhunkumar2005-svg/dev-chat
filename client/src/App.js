@@ -1,6 +1,5 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import io from "socket.io-client";
-import { playMessageSound } from "./notificationSound";
 import "./App.css";
 
 const socket = io.connect("https://dev-chat-server-0dgn.onrender.com", {
@@ -52,7 +51,6 @@ function App() {
   useEffect(() => {
     const receiveHandler = (data) => {
       setMessageList((list) => [...list, data]);
-      playMessageSound();
     };
 
     const typingHandler = (authorName) => {
