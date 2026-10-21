@@ -18,7 +18,7 @@ const messageSchema = new mongoose.Schema({
   room: String,
   author: String,
   text: String,
-  file: String, // Support for base64 image strings or file data
+  file: String,
   fileType: String,
   time: String
 });
@@ -26,9 +26,8 @@ const Message = mongoose.model("Message", messageSchema);
 
 const server = http.createServer(app);
 
-// Enable high payload limit (10MB) for handling image sharing over sockets
 const io = new Server(server, {
-  maxHttpBufferSize: 1e7, // 10 MB limit for file transfers
+  maxHttpBufferSize: 1e7,
   cors: {
     origin: "*", 
     methods: ["GET", "POST"]
@@ -40,7 +39,6 @@ const roomUsers = {};
 io.on('connection', (socket) => {
   console.log(`🟢 User Connected: ${socket.id}`);
 
-  // Join room (Supports both public rooms and private DM rooms)
   socket.on("join_room", async (data) => {
     const roomID = typeof data === "object" ? data.room : data;
     const username = typeof data === "object" ? data.username : "Anonymous";
@@ -53,7 +51,6 @@ io.on('connection', (socket) => {
       roomUsers[roomID] = [];
     }
     
-    // Prevent duplicate entries on refresh
     roomUsers[roomID] = roomUsers[roomID].filter((u) => u.username !== username);
     roomUsers[roomID].push({ id: socket.id, username });
 
@@ -67,14 +64,9 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle sending text or file messages
   socket.on("send_message", (data) => {
-    console.log("Message received for room/DM:", data.room);
-    
-    // 1. Instant socket broadcast
     socket.to(data.room).emit("receive_message", data);
 
-    // 2. Safe background save to MongoDB
     const newMessage = new Message(data);
     newMessage.save().catch((error) => {
       console.log("❌ Error saving message to MongoDB:", error);
@@ -85,8 +77,30 @@ io.on('connection', (socket) => {
     socket.to(data.room).emit("user_typing", data.author);
   });
 
+  // --- WebRTC Signaling Events ---
+  socket.on("call_user", (data) => {
+    socket.to(data.room).emit("call_incoming", {
+      offer: data.offer,
+      from: data.from
+    });
+  });
+
+  socket.on("answer_call", (data) => {
+    socket.to(data.room).emit("call_accepted", {
+      answer: data.answer
+    });
+  });
+
+  socket.on("ice_candidate", (data) => {
+    socket.to(data.room).emit("ice_candidate", data.candidate);
+  });
+
+  socket.on("end_call", (data) => {
+    socket.to(data.room).emit("call_ended");
+  });
+
   socket.on('disconnect', () => {
-    const { room, username } = socket.data || {};
+    const { room } = socket.data || {};
     if (room && roomUsers[room]) {
       roomUsers[room] = roomUsers[room].filter((u) => u.id !== socket.id);
       io.to(room).emit("user_list", roomUsers[room]);
