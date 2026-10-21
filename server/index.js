@@ -45,14 +45,16 @@ io.on('connection', (socket) => {
     socket.data = { room: roomID, username };
     console.log(`👤 User ${socket.id} (${username}) joined room/DM: ${roomID}`);
 
-    // Track active users globally or per public room
+    // Track active users per room and prevent duplicate usernames on refresh
     if (!roomUsers[roomID]) {
       roomUsers[roomID] = [];
     }
-    if (!roomUsers[roomID].some((u) => u.id === socket.id)) {
-      roomUsers[roomID].push({ id: socket.id, username });
-    }
+    
+    // Remove old socket entries for the same username and add the fresh socket ID
+    roomUsers[roomID] = roomUsers[roomID].filter((u) => u.username !== username);
+    roomUsers[roomID].push({ id: socket.id, username });
 
+    // Broadcast updated active user list to everyone in the room
     io.to(roomID).emit("user_list", roomUsers[roomID]);
 
     // Fetch history for this specific room or DM channel
