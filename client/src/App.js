@@ -17,6 +17,7 @@ function App() {
   
   const [currentChatTitle, setCurrentChatTitle] = useState(localStorage.getItem("devchat_room") ? `Room: ${localStorage.getItem("devchat_room")}` : "");
   const [message, setMessage] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
   const [messageList, setMessageList] = useState([]);
   const [typingUser, setTypingUser] = useState("");
   const [activeUsers, setActiveUsers] = useState([]);
@@ -94,7 +95,6 @@ function App() {
     }
   };
 
-  // Function to start a Private Direct Message with another user
   const startDM = (targetUser) => {
     if (targetUser === username) return;
 
@@ -107,18 +107,36 @@ function App() {
     socket.emit("join_room", { room: dmRoomID, username });
   };
 
+  // Convert uploaded image file to Base64 String
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedFile({
+          data: reader.result,
+          type: file.type
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const sendMessage = () => {
-    if (message !== "") {
+    if (message !== "" || selectedFile) {
       const messageData = {
         room: room, 
         author: username,
         text: message,
+        file: selectedFile ? selectedFile.data : null,
+        fileType: selectedFile ? selectedFile.type : null,
         time: new Date(Date.now()).getHours() + ":" + String(new Date(Date.now()).getMinutes()).padStart(2, '0'),
       };
 
       socket.emit("send_message", messageData);
       setMessageList((list) => [...list, messageData]);
       setMessage("");
+      setSelectedFile(null);
     }
   };
 
@@ -133,7 +151,7 @@ function App() {
   const styles = {
     app: {
       padding: '20px',
-      maxWidth: '700px',
+      maxWidth: '720px',
       margin: '0 auto',
       fontFamily: 'Inter, sans-serif',
       color: resolvedTheme === 'dark' ? '#f8fafc' : '#0f172a',
@@ -178,12 +196,14 @@ function App() {
     },
     inputArea: {
       display: 'flex',
+      alignItems: 'center',
       borderTop: resolvedTheme === 'dark' ? '1px solid #334155' : '1px solid #e2e8f0',
       backgroundColor: resolvedTheme === 'dark' ? '#1e293b' : '#ffffff',
+      padding: '5px 10px',
     },
     input: {
       flex: '1',
-      padding: '12px',
+      padding: '10px',
       border: 'none',
       outline: 'none',
       backgroundColor: 'transparent',
@@ -259,7 +279,20 @@ function App() {
                       wordBreak: 'break-word',
                       textAlign: 'left'
                     }}>
-                      <p style={{ margin: 0, fontSize: '14px' }}><strong>{msg.author}:</strong> {msg.text}</p>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '12px', opacity: 0.8 }}><strong>{msg.author}</strong></p>
+                      
+                      {msg.text && <p style={{ margin: 0, fontSize: '14px' }}>{msg.text}</p>}
+
+                      {msg.file && (
+                        <div style={{ marginTop: '8px' }}>
+                          <img 
+                            src={msg.file} 
+                            alt="shared-media" 
+                            style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', display: 'block' }} 
+                          />
+                        </div>
+                      )}
+
                       <span style={{ fontSize: '10px', opacity: 0.6, float: 'right', marginTop: '4px', marginLeft: '8px' }}>{msg.time}</span>
                     </div>
                   </div>
@@ -272,7 +305,19 @@ function App() {
                 )}
               </div>
 
+              {selectedFile && (
+                <div style={{ padding: '6px 12px', fontSize: '12px', background: resolvedTheme === 'dark' ? '#0f172a' : '#e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>📎 Image selected for upload</span>
+                  <button onClick={() => setSelectedFile(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#e74c3c', fontWeight: 'bold' }}>✕</button>
+                </div>
+              )}
+
               <div style={styles.inputArea}>
+                <label style={{ cursor: 'pointer', fontSize: '18px', padding: '0 8px', marginRight: '4px' }} title="Attach image">
+                  📷
+                  <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+                </label>
+
                 <input 
                   type="text" 
                   value={message} 
@@ -284,7 +329,7 @@ function App() {
                   }} 
                   style={styles.input} 
                 />
-                <button onClick={sendMessage} style={{ padding: '0 25px', background: '#2c3e50', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}>Send</button>
+                <button onClick={sendMessage} style={{ padding: '8px 20px', background: '#2c3e50', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Send</button>
               </div>
             </div>
 
