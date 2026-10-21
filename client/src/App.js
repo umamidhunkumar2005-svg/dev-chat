@@ -21,6 +21,7 @@ function App() {
   const [messageList, setMessageList] = useState([]);
   const [typingUser, setTypingUser] = useState("");
   const [activeUsers, setActiveUsers] = useState([]);
+  const [modalImage, setModalImage] = useState(null); // For fullscreen image viewer
 
   const [theme, setTheme] = useState(localStorage.getItem("devchat_theme") || "system");
   const [resolvedTheme, setResolvedTheme] = useState("light");
@@ -289,7 +290,7 @@ function App() {
                             src={msg.file} 
                             alt="shared-media" 
                             title="Click to view full image"
-                            onClick={() => window.open(msg.file, '_blank')}
+                            onClick={() => setModalImage(msg.file)}
                             style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', display: 'block', cursor: 'pointer' }} 
                           />
                         </div>
@@ -335,6 +336,53 @@ function App() {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Image Preview Modal */}
+      {modalImage && (
+        <div 
+          onClick={() => setModalImage(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000,
+            cursor: 'pointer'
+          }}
+        >
+          <div style={{ position: 'relative', maxWidth: '90%', maxHeight: '90%' }}>
+            <img 
+              src={modalImage} 
+              alt="fullscreen" 
+              style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '8px', objectFit: 'contain', display: 'block', margin: '0 auto' }} 
+            />
+            <button 
+              onClick={() => setModalImage(null)}
+              style={{
+                position: 'absolute',
+                top: '-40px',
+                right: '0px',
+                background: '#e74c3c',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                fontSize: '16px',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              ✕
+            </button>
           </div>
         </div>
       )}
