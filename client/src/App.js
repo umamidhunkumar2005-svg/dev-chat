@@ -353,6 +353,10 @@ function App() {
     window.location.reload();
   };
 
+  const getFirstLetter = (name) => {
+    return name ? name.charAt(0).toUpperCase() : "?";
+  };
+
   const styles = {
     app: {
       padding: '20px',
@@ -471,6 +475,7 @@ function App() {
             </div>
           )}
 
+          {/* Fullscreen Call Overlay - Mobile Optimized */}
           {(calling || callActive) && (
             <div style={{
               position: 'fixed',
@@ -484,41 +489,57 @@ function App() {
               flexDirection: 'column',
               justifyContent: 'space-between',
               alignItems: 'center',
-              padding: '20px 0'
+              padding: '15px 10px',
+              boxSizing: 'border-box',
+              overflowY: 'auto'
             }}>
-              <div style={{ color: '#fff', textAlign: 'center', marginTop: '10px' }}>
-                <h2>{calling ? "Calling..." : "In Call"}</h2>
-                <p style={{ opacity: 0.7 }}>{currentChatTitle} ({callType.toUpperCase()})</p>
+              <div style={{ color: '#fff', textAlign: 'center', marginTop: '5px' }}>
+                <h2 style={{ margin: '0 0 4px 0', fontSize: '20px' }}>{calling ? "Calling..." : "In Call"}</h2>
+                <p style={{ opacity: 0.7, margin: 0, fontSize: '13px' }}>{currentChatTitle} ({callType.toUpperCase()})</p>
               </div>
 
               {callType === "video" ? (
-                <div style={{ position: 'relative', width: '90%', maxWidth: '800px', height: '65vh', background: '#000', borderRadius: '16px', overflow: 'hidden' }}>
+                <div style={{ position: 'relative', width: '100%', maxWidth: '700px', height: '55vh', background: '#000', borderRadius: '12px', overflow: 'hidden', margin: '10px 0' }}>
                   <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <div style={{ position: 'absolute', bottom: '20px', right: '20px', width: '140px', height: '180px', borderRadius: '12px', overflow: 'hidden', border: '2px solid #fff', boxShadow: '0 4px 10px rgba(0,0,0,0.5)', background: '#222' }}>
+                  <div style={{ position: 'absolute', bottom: '15px', right: '15px', width: '110px', height: '140px', borderRadius: '8px', overflow: 'hidden', border: '2px solid #fff', boxShadow: '0 4px 10px rgba(0,0,0,0.5)', background: '#222' }}>
                     <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
-                  <div style={{ width: '120px', height: '120px', borderRadius: '60px', background: '#2c3e50', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '48px', color: '#fff' }}>
-                    🎙️
+                /* Audio Call UI with First Letter Avatar */
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: '15px' }}>
+                  <div style={{ 
+                    width: '100px', 
+                    height: '100px', 
+                    borderRadius: '50px', 
+                    background: 'linear-gradient(135deg, #3498db, #2ecc71)', 
+                    display: 'flex', 
+                    justifyContent: 'center', 
+                    alignItems: 'center', 
+                    fontSize: '42px', 
+                    fontWeight: 'bold',
+                    color: '#fff',
+                    boxShadow: '0 8px 20px rgba(0,0,0,0.4)'
+                  }}>
+                    {getFirstLetter(incomingCall?.from || username)}
                   </div>
-                  <h3 style={{ color: '#fff' }}>Audio Call Connected</h3>
+                  <h3 style={{ color: '#fff', margin: 0, fontSize: '18px' }}>Audio Call Connected</h3>
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: '20px', background: 'rgba(255,255,255,0.1)', padding: '12px 24px', borderRadius: '30px', backdropFilter: 'blur(10px)' }}>
-                <button onClick={toggleMute} style={{ background: isMuted ? '#e74c3c' : '#ffffff22', color: '#fff', border: 'none', width: '50px', height: '50px', borderRadius: '25px', fontSize: '20px', cursor: 'pointer' }}>
+              {/* Action Controls Bar - Positioned safely for mobile screens */}
+              <div style={{ display: 'flex', gap: '15px', background: 'rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '30px', backdropFilter: 'blur(10px)', marginBottom: '10px' }}>
+                <button onClick={toggleMute} style={{ background: isMuted ? '#e74c3c' : '#ffffff22', color: '#fff', border: 'none', width: '45px', height: '45px', borderRadius: '22.5px', fontSize: '18px', cursor: 'pointer' }}>
                   {isMuted ? '🔇' : '🎙️'}
                 </button>
 
                 {callType === "video" && (
-                  <button onClick={toggleVideo} style={{ background: isVideoOff ? '#e74c3c' : '#ffffff22', color: '#fff', border: 'none', width: '50px', height: '50px', borderRadius: '25px', fontSize: '20px', cursor: 'pointer' }}>
+                  <button onClick={toggleVideo} style={{ background: isVideoOff ? '#e74c3c' : '#ffffff22', color: '#fff', border: 'none', width: '45px', height: '45px', borderRadius: '22.5px', fontSize: '18px', cursor: 'pointer' }}>
                     {isVideoOff ? '🚫' : '📹'}
                   </button>
                 )}
 
-                <button onClick={endVideoCall} style={{ background: '#e74c3c', color: '#fff', border: 'none', width: '50px', height: '50px', borderRadius: '25px', fontSize: '20px', cursor: 'pointer', fontWeight: 'bold' }}>
+                <button onClick={endVideoCall} style={{ background: '#e74c3c', color: '#fff', border: 'none', width: '45px', height: '45px', borderRadius: '22.5px', fontSize: '18px', cursor: 'pointer', fontWeight: 'bold' }}>
                   📞
                 </button>
               </div>
