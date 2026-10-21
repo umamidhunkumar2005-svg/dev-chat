@@ -18,13 +18,17 @@ const messageSchema = new mongoose.Schema({
   room: String,
   author: String,
   text: String,
+  file: String, // Support for base64 image strings or file data
+  fileType: String,
   time: String
 });
 const Message = mongoose.model("Message", messageSchema);
 
 const server = http.createServer(app);
 
+// Enable high payload limit (10MB) for handling image sharing over sockets
 const io = new Server(server, {
+  maxHttpBufferSize: 1e7, // 10 MB limit for file transfers
   cors: {
     origin: "*", 
     methods: ["GET", "POST"]
@@ -45,19 +49,16 @@ io.on('connection', (socket) => {
     socket.data = { room: roomID, username };
     console.log(`👤 User ${socket.id} (${username}) joined room/DM: ${roomID}`);
 
-    // Track active users per room and prevent duplicate usernames on refresh
     if (!roomUsers[roomID]) {
       roomUsers[roomID] = [];
     }
     
-    // Remove old socket entries for the same username and add the fresh socket ID
+    // Prevent duplicate entries on refresh
     roomUsers[roomID] = roomUsers[roomID].filter((u) => u.username !== username);
     roomUsers[roomID].push({ id: socket.id, username });
 
-    // Broadcast updated active user list to everyone in the room
     io.to(roomID).emit("user_list", roomUsers[roomID]);
 
-    // Fetch history for this specific room or DM channel
     try {
       const previousMessages = await Message.find({ room: roomID });
       socket.emit("chat_history", previousMessages); 
@@ -66,7 +67,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle sending messages (Public or DM)
+  // Handle sending text or file messages
   socket.on("send_message", (data) => {
     console.log("Message received for room/DM:", data.room);
     
